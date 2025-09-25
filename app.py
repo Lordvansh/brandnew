@@ -2,6 +2,10 @@ from flask import Flask
 
 app = Flask(__name__)
 
-@app.route("/")
+@app.route('/')
 def home():
-    return "Hello from Flask on Vercel!"
+    return "✅ Flask is working on Vercel"
+
+@app.route('/check')
+def check():
+    return "Check endpoint working"
